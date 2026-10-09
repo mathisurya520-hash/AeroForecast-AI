@@ -1,0 +1,31 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / React
+node_modules/
+dist/
+build/
+.output/
+
+# Saved Models
+saved_models/*.joblib
+
+# Logs
+*.log
