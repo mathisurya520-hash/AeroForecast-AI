@@ -148,14 +148,23 @@ export default function Dashboard({
                 <div style={{ height: '16px', width: '150px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', animation: 'pulse 1.5s infinite' }} />
               </div>
             ) : aqError ? (
-              <div style={{ display: 'flex', gap: '0.75rem', color: 'var(--accent-danger)' }}>
-                <AlertCircle size={24} />
-                <div>
-                  <h3 style={{ fontWeight: '700' }}>Fetch Error</h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                    Air-quality data is currently unavailable for this location. Let's try searching for another city.
-                  </p>
+              <div style={{ display: 'flex', gap: '0.75rem', color: 'var(--accent-danger)', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <AlertCircle size={24} />
+                  <div>
+                    <h3 style={{ fontWeight: '700' }}>Fetch Error</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                      Air-quality data is currently unavailable for this location. Let's try searching for another city or retrying.
+                    </p>
+                  </div>
                 </div>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={requestGeolocation} 
+                  style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                >
+                  Retry Geolocation
+                </button>
               </div>
             ) : (
               <div>

@@ -21,11 +21,11 @@ def train_and_evaluate(X: pd.DataFrame, y: pd.Series, target_name: str, location
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
     
-    # 2. Define the models to compare
+    # 2. Define the models to compare (optimized for low-latency web serving)
     models = {
         "Linear Regression": LinearRegression(),
-        "Random Forest": RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1),
-        "XGBoost": XGBRegressor(n_estimators=100, max_depth=6, learning_rate=0.08, random_state=42, n_jobs=-1)
+        "Random Forest": RandomForestRegressor(n_estimators=35, max_depth=8, random_state=42, n_jobs=-1),
+        "XGBoost": XGBRegressor(n_estimators=35, max_depth=5, learning_rate=0.1, random_state=42, n_jobs=-1)
     }
     
     results = {}

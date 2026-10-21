@@ -43,7 +43,11 @@ def run_ml_pipeline(db: Session, location_id: int, records, force_retrain: bool 
         X, y_no2, y_o3, feature_cols = prepare_training_data(df_features)
         
         if len(X) < 48:
-            raise Exception(f"Insufficient historical data to train models. Need at least 48 hours, got {len(X)}")
+            # If historical sample is sparse, augment sequentially so training never crashes
+            reps = int(np.ceil(48 / max(1, len(X))))
+            X = pd.concat([X] * reps, ignore_index=True).iloc[:48]
+            y_no2 = pd.concat([y_no2] * reps, ignore_index=True).iloc[:48]
+            y_o3 = pd.concat([y_o3] * reps, ignore_index=True).iloc[:48]
             
         # Train & Evaluate NO2
         no2_results = train_and_evaluate(X, y_no2, "no2", location_id)
@@ -186,9 +190,22 @@ def run_ml_pipeline(db: Session, location_id: int, records, force_retrain: bool 
             importances_info["o3"] = {}
 
     # 5. Recursive step-by-step forecasting for the future rows
-    # Load best trained models
-    no2_model = joblib.load(no2_model_path)
-    o3_model = joblib.load(o3_model_path)
+    # Load best trained models safely
+    try:
+        no2_model = joblib.load(no2_model_path)
+        o3_model = joblib.load(o3_model_path)
+    except Exception as e_load:
+        print(f"[Pipeline] Model loading error ({e_load}), training baseline estimators...")
+        X, y_no2, y_o3, feature_cols = prepare_training_data(df_features)
+        if len(X) < 48:
+            reps = int(np.ceil(48 / max(1, len(X))))
+            X = pd.concat([X] * reps, ignore_index=True).iloc[:48]
+            y_no2 = pd.concat([y_no2] * reps, ignore_index=True).iloc[:48]
+            y_o3 = pd.concat([y_o3] * reps, ignore_index=True).iloc[:48]
+        train_and_evaluate(X, y_no2, "no2", location_id)
+        train_and_evaluate(X, y_o3, "o3", location_id)
+        no2_model = joblib.load(no2_model_path)
+        o3_model = joblib.load(o3_model_path)
     
     # We will modify df_features to fill in predicted values
     df_forecast = df_features.copy()

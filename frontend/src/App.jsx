@@ -31,7 +31,7 @@ export default function App() {
   const [isForecastLoading, setIsForecastLoading] = useState(true);
   const [forecastError, setForecastError] = useState(null);
 
-  // Request browser geolocation
+  // Request browser geolocation with high-accuracy + fallback
   const requestGeolocation = () => {
     if (!navigator.geolocation) {
       console.warn("Geolocation is not supported by this browser.");
@@ -39,31 +39,43 @@ export default function App() {
     }
     
     setIsLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const gpsLat = position.coords.latitude;
-        const gpsLon = position.coords.longitude;
-        try {
-          const res = await apiService.reverseGeocode(gpsLat, gpsLon);
-          setLat(gpsLat);
-          setLon(gpsLon);
-          setLocationName(res.name);
-          setLocationSource('gps');
-        } catch (err) {
-          console.error("GPS Reverse geocoding failed", err);
-          setLat(gpsLat);
-          setLon(gpsLon);
-          setLocationName(`Coordinates: ${gpsLat.toFixed(4)}, ${gpsLon.toFixed(4)}`);
-          setLocationSource('gps');
-        } finally {
-          setIsLocationLoading(false);
-        }
-      },
-      (error) => {
-        console.warn("Geolocation access denied or timed out:", error.message);
+
+    const handleSuccess = async (position) => {
+      const gpsLat = position.coords.latitude;
+      const gpsLon = position.coords.longitude;
+      try {
+        const res = await apiService.reverseGeocode(gpsLat, gpsLon);
+        setLat(gpsLat);
+        setLon(gpsLon);
+        setLocationName(res.name);
+        setLocationSource('gps');
+      } catch (err) {
+        console.error("GPS Reverse geocoding failed", err);
+        setLat(gpsLat);
+        setLon(gpsLon);
+        setLocationName(`Coordinates: ${gpsLat.toFixed(4)}, ${gpsLon.toFixed(4)}`);
+        setLocationSource('gps');
+      } finally {
         setIsLocationLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      }
+    };
+
+    const handleFallback = () => {
+      // Fall back to fast Wi-Fi / network geolocation if GPS sat lock times out
+      navigator.geolocation.getCurrentPosition(
+        handleSuccess,
+        (error) => {
+          console.warn("Geolocation access denied or timed out:", error.message);
+          setIsLocationLoading(false);
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      );
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      handleSuccess,
+      handleFallback,
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
     );
   };
 
