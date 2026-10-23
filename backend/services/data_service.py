@@ -5,15 +5,58 @@ from sqlalchemy.orm import Session
 from backend.models_db import Location, EnvironmentalDataCache
 from backend.database import SessionLocal
 
+_GEOCODE_CACHE = {}
+
 def reverse_geocode(lat: float, lon: float) -> str:
     """
     Reverse geocodes latitude and longitude coordinates into a human-readable city/region name.
+    Multi-tier resilient lookup:
+    1. Fast in-memory rounded cache (prevents redundant API requests)
+    2. BigDataCloud Client Reverse Geocode API (fast, high locality accuracy, no strict 1s limit)
+    3. OpenStreetMap Nominatim API (fallback)
+    4. Coordinate string (last resort)
     """
+    cache_key = (round(lat, 3), round(lon, 3))
+    if cache_key in _GEOCODE_CACHE:
+        return _GEOCODE_CACHE[cache_key]
+
+    # Provider 1: BigDataCloud Client Reverse Geocode (Excellent town/suburb granularity like Sulur)
+    try:
+        bdc_url = f"https://api.bigdatacloud.net/data/reverse-geocode-client?latitude={lat}&longitude={lon}&localityLanguage=en"
+        bdc_res = requests.get(bdc_url, timeout=4)
+        if bdc_res.status_code == 200:
+            data = bdc_res.json()
+            city = data.get("city") or data.get("locality")
+            if not city and "localityInfo" in data:
+                # Find most specific administrative locality (town/panchayat/taluk)
+                for admin in reversed(data.get("localityInfo", {}).get("administrative", [])):
+                    if admin.get("adminLevel", 0) >= 6 and admin.get("name"):
+                        city = admin.get("name")
+                        break
+            state = data.get("principalSubdivision")
+            country = data.get("countryName")
+
+            parts = []
+            if city:
+                parts.append(city)
+            if state and state != city:
+                parts.append(state)
+            if country:
+                parts.append(country)
+
+            if parts:
+                resolved = ", ".join(parts)
+                _GEOCODE_CACHE[cache_key] = resolved
+                return resolved
+    except Exception as e:
+        print(f"[ReverseGeocode] BigDataCloud notice: {e}")
+
+    # Provider 2: OpenStreetMap Nominatim (Fallback)
     try:
         headers = {
-            "User-Agent": "AirQualityForecastApp/1.0 (academic project; bomathi@gemini.com)"
+            "User-Agent": "AeroForecastAI/1.0 (academic project; bomathi@gemini.com)"
         }
-        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=10&addressdetails=1"
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=14&addressdetails=1"
         res = requests.get(url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
@@ -23,10 +66,9 @@ def reverse_geocode(lat: float, lon: float) -> str:
                 or address.get("town")
                 or address.get("village")
                 or address.get("municipality")
-                or address.get("district")
+                or address.get("suburb")
                 or address.get("county")
                 or address.get("state_district")
-                or address.get("suburb")
             )
             state = address.get("state")
             country = address.get("country")
@@ -40,9 +82,12 @@ def reverse_geocode(lat: float, lon: float) -> str:
                 parts.append(country)
                 
             if parts:
-                return ", ".join(parts)
+                resolved = ", ".join(parts)
+                _GEOCODE_CACHE[cache_key] = resolved
+                return resolved
     except Exception as e:
-        print(f"Error reverse geocoding: {e}")
+        print(f"[ReverseGeocode] Nominatim notice: {e}")
+
     return f"Coordinates: {lat:.4f}, {lon:.4f}"
 
 DEFAULT_HEADERS = {
@@ -227,6 +272,13 @@ def get_or_fetch_environmental_data(db: Session, lat: float, lon: float, force_r
     should_fetch = False
     
     if location:
+        # Auto-heal locations whose cached name was a fallback Coordinate string or overly generic state-only name
+        if location.name and (location.name.startswith("Coordinates:") or location.name in ["Tamil Nadu, India", "India"]):
+            fresh_name = reverse_geocode(lat, lon)
+            if not fresh_name.startswith("Coordinates:"):
+                location.name = fresh_name
+                db.commit()
+
         latest_cache = db.query(EnvironmentalDataCache).filter(
             EnvironmentalDataCache.location_id == location.id
         ).order_by(EnvironmentalDataCache.fetched_at.desc()).first()

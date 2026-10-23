@@ -92,6 +92,9 @@ export default function App() {
       try {
         const data = await apiService.getCurrentAirQuality(lat, lon);
         setCurrentAQ(data);
+        if (data?.location_name && !data.location_name.startsWith('Coordinates:')) {
+          setLocationName(prev => (prev.startsWith('Coordinates:') ? data.location_name : prev));
+        }
       } catch (err) {
         console.error(err);
         setAQError(err.message || "Failed to load current air quality.");

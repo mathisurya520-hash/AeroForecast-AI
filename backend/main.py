@@ -30,7 +30,7 @@ from backend.services.cpcb_service import (
 app = FastAPI(
     title="AI-Based Air Quality Forecasting System API",
     description="Backend API for predicting short-term air pollution levels (NO2 and O3) using ML models.",
-    version="1.0.0"
+    version="1.0.1"
 )
 
 # Add CORS Middleware to allow React frontend connection

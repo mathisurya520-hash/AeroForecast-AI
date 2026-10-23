@@ -29,11 +29,39 @@ export const apiService = {
 
   /**
    * Reverse geocode coordinates to get city/region name
+   * Uses backend with automatic BigDataCloud client fallback if backend is slow/unavailable
    */
   async reverseGeocode(lat, lon) {
-    const url = `${BASE_URL}/location/reverse?lat=${lat}&lon=${lon}`;
-    const response = await fetch(url);
-    return handleResponse(response);
+    try {
+      const url = `${BASE_URL}/location/reverse?lat=${lat}&lon=${lon}`;
+      const response = await fetch(url);
+      const data = await handleResponse(response);
+      if (data && data.name && !data.name.startsWith('Coordinates:')) {
+        return data;
+      }
+    } catch (err) {
+      console.warn("Backend reverse geocoding failed, trying client fallback:", err);
+    }
+
+    // Client-side fallback via BigDataCloud (fast, free, high-accuracy)
+    try {
+      const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+      const bdcRes = await fetch(bdcUrl);
+      if (bdcRes.ok) {
+        const bdcData = await bdcRes.json();
+        const city = bdcData.city || bdcData.locality || bdcData.localityInfo?.administrative?.find(a => a.adminLevel >= 6)?.name || '';
+        const state = bdcData.principalSubdivision || '';
+        const country = bdcData.countryName || '';
+        const parts = [city, state, country].filter(Boolean);
+        if (parts.length > 0) {
+          return { name: parts.join(', '), latitude: lat, longitude: lon };
+        }
+      }
+    } catch (e) {
+      console.warn("Client fallback reverse geocode failed:", e);
+    }
+
+    return { name: `Coordinates: ${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}`, latitude: lat, longitude: lon };
   },
 
   /**
